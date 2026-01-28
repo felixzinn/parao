@@ -1,44 +1,51 @@
-from unittest import TestCase
+import pytest
 
 from parao.misc import ContextValue, PeekableIter, is_subseq, safe_len, safe_repr
 
 
-class TestContextValue(TestCase):
-    def test_defaults(self):
-        cv = ContextValue("cv")
-        sentinel = object()
-        self.assertIs(cv(default=sentinel), sentinel)
+def test_context_value_defaults():
+    cv = ContextValue("cv")
+    sentinel = object()
+    assert cv(default=sentinel) is sentinel
 
 
-class TestMisc(TestCase):
-    def test_safe(self):
-        class Foo:
-            def __repr__(self):
-                raise RuntimeError()
+def test_misc_safe():
+    class Foo:
+        def __repr__(self):
+            raise RuntimeError()
 
-        self.assertRaises(RuntimeError, lambda: repr(Foo()))
-        self.assertEqual(safe_repr(o := Foo()), object.__repr__(o))
+        def __len__(self):
+            raise TypeError()
 
-        self.assertRaises(TypeError, lambda: len(Foo()))
-        self.assertEqual(safe_len(Foo(), (o := object())), o)
+    with pytest.raises(RuntimeError):
+        repr(Foo())
+    o = Foo()
+    assert safe_repr(o) == object.__repr__(o)
 
-    def test_peekable(self):
-        tpl = object(), object(), object()
+    with pytest.raises(TypeError):
+        len(Foo())
+    o = object()
+    assert safe_len(Foo(), o) is o
 
-        pi = PeekableIter(tpl)
 
-        self.assertIs(pi.peek(), tpl[0])
-        self.assertIs(pi.peek(), tpl[0])
-        self.assertTrue(pi.more)
-        self.assertEqual(tuple(pi), tpl)
-        self.assertRaises(StopIteration, lambda: pi.peek())
-        self.assertFalse(pi.more)
-        self.assertIs(pi.peek(o := object()), o)
+def test_peekable():
+    tpl = object(), object(), object()
+    pi = PeekableIter(tpl)
 
-    def test_is_subseq(self):
-        self.assertTrue(is_subseq("india", "indonesia"))
-        self.assertTrue(is_subseq("oman", "romania"))
-        self.assertTrue(is_subseq("mali", "malawi"))
-        self.assertFalse(is_subseq("mali", "banana"))
-        self.assertFalse(is_subseq("ais", "indonesia"))
-        self.assertFalse(is_subseq("ca", "abc"))
+    assert pi.peek() is tpl[0]
+    assert pi.peek() is tpl[0]
+    assert pi.more is True
+    assert tuple(pi) == tpl
+    with pytest.raises(StopIteration):
+        pi.peek()
+    assert pi.more is False
+    assert pi.peek(o := object()) is o
+
+
+def test_is_subseq():
+    assert is_subseq("india", "indonesia")
+    assert is_subseq("oman", "romania")
+    assert is_subseq("mali", "malawi")
+    assert not is_subseq("mali", "banana")
+    assert not is_subseq("ais", "indonesia")
+    assert not is_subseq("ca", "abc")

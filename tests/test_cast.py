@@ -1,84 +1,104 @@
 from collections.abc import Callable
 from typing import Annotated, Any
-from unittest import TestCase
+
+import pytest
 
 from parao.cast import CastError, cast
 
 
-class TestCasting(TestCase):
-    def test_primitives(self):
-        self.assertEqual(cast("123", int), 123)
-        self.assertEqual(cast("1.3", float), 1.3)
-        self.assertEqual(cast("1j", complex), 1j)
-        self.assertEqual(cast(123, str), "123")
+def test_primitives():
+    assert cast("123", int) == 123
+    assert cast("1.3", float) == 1.3
+    assert cast("1j", complex) == 1j
+    assert cast(123, str) == "123"
 
-        # forbidden
-        self.assertRaises(CastError, lambda: cast("y", bool))
-        self.assertRaises(CastError, lambda: cast(None, bool))
-        self.assertRaises(CastError, lambda: cast(123, bytes))
-        self.assertRaises(CastError, lambda: cast([], str))
+    # forbidden
+    with pytest.raises(CastError):
+        cast("y", bool)
+    with pytest.raises(CastError):
+        cast(None, bool)
+    with pytest.raises(CastError):
+        cast(123, bytes)
+    with pytest.raises(CastError):
+        cast([], str)
 
-        # None
-        self.assertEqual(cast(None, None), None)
-        self.assertEqual(cast(None, type(None)), None)
-        self.assertRaises(TypeError, lambda: cast(True, None))
+    # None
+    assert cast(None, None) is None
+    assert cast(None, type(None)) is None
+    with pytest.raises(TypeError):
+        cast(True, None)
 
-        # bad type
-        self.assertRaises(TypeError, lambda: cast(..., ...))
+    # bad type
+    with pytest.raises(TypeError):
+        cast(..., ...)
 
-    def test_containers(self):
-        self.assertEqual(cast(["123"], list[int]), [123])
-        self.assertEqual(cast({"123"}, set[int]), {123})
-        self.assertEqual(cast(frozenset({"123"}), frozenset[int]), frozenset({123}))
 
-        self.assertEqual(cast({"123": 456}, dict[int, str]), {123: "456"})
-        self.assertEqual(cast([("123", 456)], dict[int, str]), {123: "456"})
+def test_containers():
+    assert cast(["123"], list[int]) == [123]
+    assert cast({"123"}, set[int]) == {123}
+    assert cast(frozenset({"123"}), frozenset[int]) == frozenset({123})
 
-        # no str/bytes to sequence
-        self.assertRaises(TypeError, lambda: cast("123", list[int]))
-        self.assertRaises(TypeError, lambda: cast(b"123", tuple[int, ...]))
+    assert cast({"123": 456}, dict[int, str]) == {123: "456"}
+    assert cast([("123", 456)], dict[int, str]) == {123: "456"}
 
-        # empty tuple
-        self.assertEqual(cast([], tuple[()]), ())
-        self.assertRaises(ValueError, lambda: cast([1], tuple[()]))
+    # no str/bytes to sequence
+    with pytest.raises(TypeError):
+        cast("123", list[int])
+    with pytest.raises(TypeError):
+        cast(b"123", tuple[int, ...])
 
-        # any tuple
-        self.assertEqual(cast([1, 2, 3], tuple), (1, 2, 3))
-        self.assertEqual(cast([1, 2, 3], tuple[Any, ...]), (1, 2, 3))
-        self.assertRaises(TypeError, lambda: cast([1], tuple[...]))  # type: ignore
+    # empty tuple
+    assert cast([], tuple[()]) == ()
+    with pytest.raises(ValueError):
+        cast([1], tuple[()])
 
-        # fixed tuple
-        self.assertEqual(cast([1, 2, 3], tuple[int, str, float]), (1, "2", 3.0))
-        self.assertRaises(ValueError, lambda: cast([], tuple[int]))
+    # any tuple
+    assert cast([1, 2, 3], tuple) == (1, 2, 3)
+    assert cast([1, 2, 3], tuple[Any, ...]) == (1, 2, 3)
+    with pytest.raises(TypeError):
+        cast([1], tuple[...])  # type: ignore
 
-    def test_complex(self):
-        self.assertRaises(ValueError, lambda: cast(1.2, int))
-        self.assertEqual(cast("1.2", int | float), 1.2)
-        self.assertRaises(TypeError, lambda: cast("foo", int | float))
-        self.assertEqual(cast("123", Annotated[int, str]), 123)
+    # fixed tuple
+    assert cast([1, 2, 3], tuple[int, str, float]) == (1, "2", 3.0)
+    with pytest.raises(ValueError):
+        cast([], tuple[int])
 
-        self.assertIs(cast(f := lambda: None, Callable[..., None]), f)
-        self.assertIs(cast(f := lambda x: None, Callable[[None], None]), f)
-        self.assertRaises(CastError, lambda: cast(lambda x: None, Callable[[], None]))
-        self.assertRaises(CastError, lambda: cast(lambda: None, Callable[[None], None]))
 
-        class Foo:
-            @classmethod
-            def __cast_from__(cls, value, original_type):
+def test_complex():
+    with pytest.raises(ValueError):
+        cast(1.2, int)
+    assert cast("1.2", int | float) == 1.2
+    with pytest.raises(TypeError):
+        cast("foo", int | float)
+    assert cast("123", Annotated[int, str]) == 123
+
+    assert cast(f := lambda: None, Callable[..., None]) is f
+    assert cast(f := lambda x: None, Callable[[None], None]) is f
+    with pytest.raises(CastError):
+        cast(lambda x: None, Callable[[], None])
+    with pytest.raises(CastError):
+        cast(lambda: None, Callable[[None], None])
+
+    class Foo:
+        @classmethod
+        def __cast_from__(cls, value, original_type):
+            return NotImplemented
+
+    with pytest.raises(TypeError):
+        cast(1, Foo)
+
+    class Bar:
+        def __cast_to__(self, typ, original_type):
+            try:
+                return typ(1.2)
+            except Exception:
                 return NotImplemented
 
-        self.assertRaises(TypeError, lambda: cast(1, Foo))
+    assert cast(Bar(), int) == 1
+    with pytest.raises(TypeError):
+        cast(Bar(), list)
 
-        class Bar:
-            def __cast_to__(self, typ, original_type):
-                try:
-                    return typ(1.2)
-                except Exception:
-                    return NotImplemented
+    class Boo[T]: ...
 
-        self.assertEqual(cast(Bar(), int), 1)
-        self.assertRaises(TypeError, lambda: cast(Bar(), list))
-
-        class Boo[T]: ...
-
-        self.assertRaises(TypeError, lambda: cast(1, Boo[int]))
+    with pytest.raises(TypeError):
+        cast(1, Boo[int])

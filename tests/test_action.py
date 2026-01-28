@@ -1,6 +1,7 @@
 from typing import Any
-from unittest import TestCase
 from unittest.mock import Mock, call, patch
+
+import pytest
 
 from parao.action import Plan, RecursiveAction, SimpleAction, ValueAction
 from parao.core import Param, ParaO, Prop, UntypedParameter, Value
@@ -48,154 +49,156 @@ class FooBad(FooBase):
         return Foo2()
 
 
-class TestAction(TestCase):
-    def test_simple(self):
-        func = Mock()
+def test_simple():
+    func = Mock()
 
-        class Foo(ParaO):
-            act = SimpleAction(func)
+    class Foo(ParaO):
+        act = SimpleAction(func)
 
-        Plan().run([Foo()])
-        func.assert_not_called()
+    Plan().run([Foo()])
+    func.assert_not_called()
 
-        Plan().run([Foo({"act": False})])
-        func.assert_not_called()
+    Plan().run([Foo({"act": False})])
+    func.assert_not_called()
 
-        foo = Plan().run1(Foo({"act": True}))
-        func.assert_called_once_with(foo)
+    foo = Plan().run1(Foo({"act": True}))
+    func.assert_called_once_with(foo)
 
-        func.reset_mock()
-        foo = Foo()
-        foo.act()
-        func.assert_called_once_with(foo)
+    func.reset_mock()
+    foo = Foo()
+    foo.act()
+    func.assert_called_once_with(foo)
 
-    def test_cov_method_1st_arg_annotation(self):
-        class Bad1(ParaO):
-            @ValueAction
-            def bad_signature1(self): ...
 
-        with self.assertRaises(TypeError), self.assertWarns(UntypedParameter):
-            Bad1(bad_signature1=1).bad_signature1()
+def test_cov_method_1st_arg_annotation():
+    class Bad1(ParaO):
+        @ValueAction
+        def bad_signature1(self): ...
 
-        class Bad2(ParaO):
-            @ValueAction
-            def bad_signature2(self, *, kw1, kw2): ...
+    with pytest.raises(TypeError), pytest.warns(UntypedParameter):
+        Bad1(bad_signature1=1).bad_signature1()
 
-        with self.assertRaises(TypeError), self.assertWarns(UntypedParameter):
-            Bad2(bad_signature2=2).bad_signature2()
+    class Bad2(ParaO):
+        @ValueAction
+        def bad_signature2(self, *, kw1, kw2): ...
 
-    def test_value_action(self):
-        mock = Mock()
+    with pytest.raises(TypeError), pytest.warns(UntypedParameter):
+        Bad2(bad_signature2=2).bad_signature2()
 
-        class Foo(ParaO):
-            @ValueAction
-            def act(self, value: int):
-                return mock(self, value)
 
-            @ValueAction
-            def act_no_type(self, value):
-                return (123, value)
+def test_value_action():
+    mock = Mock()
 
-            @ValueAction[int, None]
-            def act2(self, value): ...
+    class Foo(ParaO):
+        @ValueAction
+        def act(self, value: int):
+            return mock(self, value)
 
-        with self.assertRaises(TypeError):
-            Foo().act()
+        @ValueAction
+        def act_no_type(self, value):
+            return (123, value)
 
-        with self.assertWarns(UntypedParameter):
-            Plan().run([foo := Foo({"act": 123})])
-        mock.assert_called_once_with(foo, 123)
+        @ValueAction[int, None]
+        def act2(self, value): ...
+
+    with pytest.raises(TypeError):
+        Foo().act()
+
+    with pytest.warns(UntypedParameter):
+        Plan().run([foo := Foo({"act": 123})])
+    mock.assert_called_once_with(foo, 123)
+
+    mock.reset_mock()
+    foo.act()
+    mock.assert_called_once_with(foo, 123)
+
+    mock.reset_mock()
+    mock.return_value = 456
+    assert foo.act(321) == 456
+    mock.assert_called_once_with(foo, 321)
+
+    sentinel = object()
+    assert foo.act_no_type(sentinel) == (123, sentinel)
+
+
+def test_recursive_action():
+    mock = Mock(return_value=None)
+
+    with patch.object(FooBase.act, "func", mock):
+        mock.reset_mock()
+        Plan.run1(Foo3(act=None))
+        assert mock.call_count == 0
 
         mock.reset_mock()
-        foo.act()
-        mock.assert_called_once_with(foo, 123)
+        mix4 = Plan.run1(FooMix({"act": 3, ("inner", "act"): True}))
+        mock.assert_has_calls(
+            [
+                call(mix4, 0, 0),
+                call(mix4.inner[0], 1, 1),
+                call(mix4.inner[0].foo1, 2, 2),
+                call(mix4.inner[1], 1, 0),
+            ]
+        )
+        assert mock.call_count == 4
 
         mock.reset_mock()
-        mock.return_value = 456
-        self.assertEqual(foo.act(321), 456)
-        mock.assert_called_once_with(foo, 321)
-
-        sentinel = object()
-        self.assertEqual(foo.act_no_type(sentinel), (123, sentinel))
-
-    def test_recursive_action(self):
-        mock = Mock(return_value=None)
-
-        with patch.object(FooBase.act, "func", mock):
-            mock.reset_mock()
-            Plan.run1(Foo3(act=None))
-            self.assertEqual(mock.call_count, 0)
-
-            mock.reset_mock()
-            mix4 = Plan.run1(FooMix({"act": 3, ("inner", "act"): True}))
-            mock.assert_has_calls(
-                [
-                    call(mix4, 0, 0),
-                    call(mix4.inner[0], 1, 1),
-                    call(mix4.inner[0].foo1, 2, 2),
-                    call(mix4.inner[1], 1, 0),
-                ]
+        mix6 = Plan.run1(
+            FooMix(
+                {
+                    "act": 3,
+                    "interrupter": Value(True, position=1),
+                    (Foo2, "act"): Value(True, position=2),
+                }
             )
-            self.assertEqual(mock.call_count, 4)
+        )
+        mock.assert_has_calls(
+            [
+                call(mix6, 0, 0),
+                call(mix6.inner[0], 1, 1),
+                call(mix6.inner[0].foo1, 2, 2),
+                call(mix6.inner[1], 1, 0),
+                call(mix6.inner[0], 0, 0),
+                call(mix6.inner[0].foo1, 1, 0),
+            ]
+        )
+        assert mock.call_count == 6
 
-            mock.reset_mock()
-            mix6 = Plan.run1(
-                FooMix(
-                    {
-                        "act": 3,
-                        "interrupter": Value(True, position=1),
-                        (Foo2, "act"): Value(True, position=2),
-                    }
-                )
-            )
-            mock.assert_has_calls(
-                [
-                    call(mix6, 0, 0),
-                    call(mix6.inner[0], 1, 1),
-                    call(mix6.inner[0].foo1, 2, 2),
-                    call(mix6.inner[1], 1, 0),
-                    call(mix6.inner[0], 0, 0),
-                    call(mix6.inner[0].foo1, 1, 0),
-                ]
-            )
-            self.assertEqual(mock.call_count, 6)
+        mock.reset_mock()
+        mixB = Plan.run1(FooBad(act=True))
+        mock.assert_has_calls(
+            [call(mixB, 0, 0), call(mixB.bad, 1, 0), call(mixB.bad.foo1, 2, 0)]
+        )
+        assert mock.call_count == 3
 
-            mock.reset_mock()
-            mixB = Plan.run1(FooBad(act=True))
-            mock.assert_has_calls(
-                [call(mixB, 0, 0), call(mixB.bad, 1, 0), call(mixB.bad.foo1, 2, 0)]
-            )
-            self.assertEqual(mock.call_count, 3)
+        mock.reset_mock()
+        foo3 = Plan.run1(Foo3(act=True))
+        mock.assert_has_calls(
+            [call(foo3, 0, 0), call(foo3.foo2, 1, 0), call(foo3.foo2.foo1, 2, 0)]
+        )
 
-            mock.reset_mock()
-            foo3 = Plan.run1(Foo3(act=True))
-            mock.assert_has_calls(
-                [call(foo3, 0, 0), call(foo3.foo2, 1, 0), call(foo3.foo2.foo1, 2, 0)]
-            )
+        mock.reset_mock()
+        foo3.act(1)
+        mock.assert_has_calls([call(foo3, 0, 0), call(foo3.foo2, 1, 0)])
 
-            mock.reset_mock()
-            foo3.act(1)
-            mock.assert_has_calls([call(foo3, 0, 0), call(foo3.foo2, 1, 0)])
+        mock.reset_mock()
+        (foo3 := Foo3()).act()
+        mock.assert_has_calls(
+            [call(foo3, 0, 0), call(foo3.foo2, 1, 0), call(foo3.foo2.foo1, 2, 0)]
+        )
 
-            mock.reset_mock()
-            (foo3 := Foo3()).act()
-            mock.assert_has_calls(
-                [call(foo3, 0, 0), call(foo3.foo2, 1, 0), call(foo3.foo2.foo1, 2, 0)]
-            )
+        mock.reset_mock()
+        (foo3 := Foo3({(Foo1, "act"): False})).act()
+        mock.assert_has_calls([call(foo3, 0, 0), call(foo3.foo2, 1, 0)])
 
-            mock.reset_mock()
-            (foo3 := Foo3({(Foo1, "act"): False})).act()
-            mock.assert_has_calls([call(foo3, 0, 0), call(foo3.foo2, 1, 0)])
+        mock.reset_mock()
+        (foo3 := Foo3()).act(1)
+        mock.assert_has_calls([call(foo3, 0, 0), call(foo3.foo2, 1, 0)])
 
-            mock.reset_mock()
-            (foo3 := Foo3()).act(1)
-            mock.assert_has_calls([call(foo3, 0, 0), call(foo3.foo2, 1, 0)])
+        mock.reset_mock()
+        (foo3 := Foo3()).act(0)
+        mock.assert_has_calls([call(foo3, 0, 0)])
 
-            mock.reset_mock()
-            (foo3 := Foo3()).act(0)
-            mock.assert_has_calls([call(foo3, 0, 0)])
-
-            mock.reset_mock()
-            mock.return_value = True
-            (foo3 := Foo3()).act()
-            mock.assert_has_calls([call(foo3, 0, 0)])
+        mock.reset_mock()
+        mock.return_value = True
+        (foo3 := Foo3()).act()
+        mock.assert_has_calls([call(foo3, 0, 0)])

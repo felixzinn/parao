@@ -1,6 +1,5 @@
 import pickle
 from operator import attrgetter
-from unittest import TestCase
 from unittest.mock import Mock
 from warnings import catch_warnings
 
@@ -159,426 +158,418 @@ def test_Fragments():
     ]
 
 
-class TestParam(TestCase):
-    def test_param(self):
-        self.assertIs(Param(type=(o := object())).type, o)
-        self.assertIs(Param[o := object()]().type, o)
-        self.assertRaises(TypeError, lambda: Param[int, str])
+def test_param():
+    assert Param(type=(o := object())).type is o
+    assert Param[o := object()]().type is o
+    with pytest.raises(TypeError):
+        Param[int, str]
 
-        # missing name - not really triggerable by user
-        self.assertIs(Param()._name(int), None)
-
-    def test_typed_alias(self):
-        with self.assertWarns(TypedAliasMismatch):
-
-            class WonkyParam[A, B, C](_Param[B]): ...
-
-        WonkyParam[int, str, bool]()
-
-        class Sentinel:
-            pass
-
-        class StrangeParam(_Param):
-            type = Sentinel
-
-        self.assertIs(StrangeParam().type, Sentinel)
-
-        with self.assertWarns(TypedAliasRedefined):
-
-            class RedundantParam[T](_Param[T]):
-                TypedAlias.register(T, TypedAlias._typevar2name[T])
-
-        with self.assertRaises(TypedAliasClash):
-
-            class ClashingParam[T](_Param[T]):
-                TypedAlias.register(T, "not" + TypedAlias._typevar2name[T])
-
-        with self.assertWarns(TypedAliasMismatch):
-
-            class MismatchParam[R](_Param[R]): ...
-
-    def test_specialized(self):
-        uniq_const = object()
-        uniq_aux = object()
-        uniq_return = ParaO()
-        uniq_override = ParaO()
-
-        class Special(ParaO):
-            const = Const(uniq_const)
-
-            prop: ParaO
-
-            @Prop(aux=uniq_aux)
-            def prop(self):
-                return uniq_return
-
-        with self.assertRaises(AttributeError):
-            Special.prop._on_prop_attr
-        with self.assertRaises(AttributeError):
-            Special.prop.on_func_attr
-
-        Special.prop.func.on_func_attr = attr = object()
-        self.assertIs(Special.prop.on_func_attr, attr)
-
-        self.assertIs(Special(const=None).const, uniq_const)
-        self.assertIs(Special.prop.aux, uniq_aux)
-        self.assertIs(Special().prop, uniq_return)
-        self.assertIs(Special(prop=uniq_override).prop, uniq_override)
+    # missing name - not really triggerable by user
+    assert Param()._name(int) is None
 
 
-class TestParaO(TestCase):
-    def test_create(self):
-        ParaO()
+def test_typed_alias():
+    with pytest.warns(TypedAliasMismatch):
 
-        class Sub(ParaO): ...
+        class WonkyParam[A, B, C](_Param[B]): ...
 
-        self.assertIsInstance(Sub(), Sub)
-        self.assertIsInstance(ParaO({ParaO: Sub}), Sub)
-        self.assertIsInstance(ParaO({"__class__": Sub}), Sub)
+    WonkyParam[int, str, bool]()
 
-        # cover some rare branches
-        self.assertIsInstance(
-            ParaO(
-                Fragments(
-                    (
-                        Fragments.from_dict({ParaO: UNSET}),
-                        Fragments.EMPTY,
-                        Fragments.from_dict({ParaO: Sub}),
-                    )
+    class Sentinel:
+        pass
+
+    class StrangeParam(_Param):
+        type = Sentinel
+
+    assert StrangeParam().type is Sentinel
+
+    with pytest.warns(TypedAliasRedefined):
+
+        class RedundantParam[T](_Param[T]):
+            TypedAlias.register(T, TypedAlias._typevar2name[T])
+
+    with pytest.raises(TypedAliasClash):
+
+        class ClashingParam[T](_Param[T]):
+            TypedAlias.register(T, "not" + TypedAlias._typevar2name[T])
+
+    with pytest.warns(TypedAliasMismatch):
+
+        class MismatchParam[R](_Param[R]): ...
+
+
+def test_specialized():
+    uniq_const = object()
+    uniq_aux = object()
+    uniq_return = ParaO()
+    uniq_override = ParaO()
+
+    class Special(ParaO):
+        const = Const(uniq_const)
+
+        prop: ParaO
+
+        @Prop(aux=uniq_aux)
+        def prop(self):
+            return uniq_return
+
+    with pytest.raises(AttributeError):
+        Special.prop._on_prop_attr
+    with pytest.raises(AttributeError):
+        Special.prop.on_func_attr
+
+    Special.prop.func.on_func_attr = attr = object()
+    assert Special.prop.on_func_attr is attr
+
+    assert Special(const=None).const is uniq_const
+    assert Special.prop.aux is uniq_aux
+    assert Special().prop is uniq_return
+    assert Special(prop=uniq_override).prop is uniq_override
+
+
+def test_create():
+    ParaO()
+
+    class Sub(ParaO): ...
+
+    assert isinstance(Sub(), Sub)
+    assert isinstance(ParaO({ParaO: Sub}), Sub)
+    assert isinstance(ParaO({"__class__": Sub}), Sub)
+
+    # cover some rare branches
+    assert isinstance(
+        ParaO(
+            Fragments(
+                (
+                    Fragments.from_dict({ParaO: UNSET}),
+                    Fragments.EMPTY,
+                    Fragments.from_dict({ParaO: Sub}),
                 )
-            ),
-            Sub,
-        )
+            )
+        ),
+        Sub,
+    )
 
-        self.assertRaises(TypeError, lambda: ParaO({ParaO: 123}))
+    with pytest.raises(TypeError):
+        ParaO({ParaO: 123})
 
-        with (
-            catch_warnings(action="ignore", category=OwnParameters.CacheReset),
-            self.assertRaises(DuplicateParameter),
-        ):
-            Sub.foo1 = Sub.foo2 = Param()
+    with (
+        catch_warnings(action="ignore", category=OwnParameters.CacheReset),
+        pytest.raises(DuplicateParameter),
+    ):
+        Sub.foo1 = Sub.foo2 = Param()
 
-        self.assertEqual(
-            Sub().__repr__(compact="???"),
-            "tests.test_core:TestParaO.test_create.<locals>.Sub(???)",
-        )
+    assert (
+        Sub().__repr__(compact="???") == "tests.test_core:test_create.<locals>.Sub(???)"
+    )
 
-    def test_own_params(self):
-        class Sub(ParaO):
-            foo: int = Param()
-            bar: str = Param()
 
-        self.assertEqual(Sub.__own_parameters__, {"foo": Sub.foo, "bar": Sub.bar})
+def test_own_params():
+    class Sub(ParaO):
+        foo: int = Param()
+        bar: str = Param()
 
-        with self.assertWarns(OwnParameters.CacheReset):
-            Sub.boo = Param(type=float)
+    assert Sub.__own_parameters__ == {"foo": Sub.foo, "bar": Sub.bar}
 
-        self.assertEqual(Sub.__own_parameters__["boo"], Sub.boo)
+    with pytest.warns(OwnParameters.CacheReset):
+        Sub.boo = Param(type=float)
 
-        with self.assertWarns(OwnParameters.CacheReset):
-            Sub.boo = Param(type=complex)
+    assert Sub.__own_parameters__["boo"] == Sub.boo
 
-        self.assertEqual(Sub.__own_parameters__["boo"], Sub.boo)
+    with pytest.warns(OwnParameters.CacheReset):
+        Sub.boo = Param(type=complex)
 
-        with self.assertWarns(OwnParameters.CacheReset):
-            del Sub.foo, Sub.bar, Sub.boo
+    assert Sub.__own_parameters__["boo"] == Sub.boo
 
-        self.assertEqual(Sub.__own_parameters__, {})
+    with pytest.warns(OwnParameters.CacheReset):
+        del Sub.foo, Sub.bar, Sub.boo
 
-        with self.assertWarns(OwnParameters.CacheReset):
-            Sub.boo = None
-        del Sub.boo
+    assert Sub.__own_parameters__ == {}
 
-        Sub.__dunder__ = None
-        del Sub.__dunder__
+    with pytest.warns(OwnParameters.CacheReset):
+        Sub.boo = None
+    del Sub.boo
 
-    def test_resolution_simple(self):
-        class Sub(ParaO):
-            foo: int = Param()
-            bar = Param(None, type=str)
-            boo = Param[bool]()
-            notyp = Param(None)
+    Sub.__dunder__ = None
+    del Sub.__dunder__
 
-        self.assertEqual(Sub.boo.type, bool)
 
-        with self.assertRaises(MissingParameterValue):
-            Sub().foo
-        with self.assertWarns(UntypedParameter):
-            Sub().notyp
+def test_resolution_simple():
+    class Sub(ParaO):
+        foo: int = Param()
+        bar = Param(None, type=str)
+        boo = Param[bool]()
+        notyp = Param(None)
 
-        self.assertEqual(Sub({"foo": 123}).foo, 123)
-        self.assertEqual(Sub({Sub.foo: 123}).foo, 123)
-        self.assertEqual(Sub({(Sub, "foo"): 123}).foo, 123)
-        self.assertEqual(Sub({(Sub, Sub, "foo"): 123}).foo, 123)
-        self.assertEqual(Sub({(Sub, Sub.foo): 123}).foo, 123)
+    assert Sub.boo.type is bool
 
-        self.assertEqual(Sub().bar, None)
-        self.assertEqual(Sub(bar=123).bar, "123")
+    with pytest.raises(MissingParameterValue):
+        Sub().foo
+    with pytest.warns(UntypedParameter):
+        Sub().notyp
 
-        self.assertEqual(Sub({("foo", "N_A"): 123, "N_A": "", "foo": 321}).foo, 321)
+    assert Sub({"foo": 123}).foo == 123
+    assert Sub({Sub.foo: 123}).foo == 123
+    assert Sub({(Sub, "foo"): 123}).foo == 123
+    assert Sub({(Sub, Sub, "foo"): 123}).foo == 123
+    assert Sub({(Sub, Sub.foo): 123}).foo == 123
 
-    def test_resolution_complex(self):
-        class Sub(ParaO):
-            foo: int = Param()
-            bar: str = Param(None)
+    assert Sub().bar is None
+    assert Sub(bar=123).bar == "123"
 
-        class Sub2(Sub):
-            boo: bool = Param()
+    assert Sub({("foo", "N_A"): 123, "N_A": "", "foo": 321}).foo == 321
 
-        self.assertEqual(Sub({Sub: Sub2, "boo": True}).boo, True)
 
-        class Wrap(ParaO):
-            one: Sub = Param()
-            other: Sub2 = Param()
+def test_resolution_complex():
+    class Sub(ParaO):
+        foo: int = Param()
+        bar: str = Param(None)
 
-        class More(ParaO):
-            inner: Wrap = Param()
+    class Sub2(Sub):
+        boo: bool = Param()
 
-        for addr in [("one", "bar"), (Wrap.one, Sub.bar), (Wrap.one, Sub, "bar")]:
-            with self.subTest(addr=addr):
-                self.assertEqual(Wrap({addr: 123}).one.bar, "123")
-                self.assertEqual(Wrap({addr: 123}).other.bar, None)
+    assert Sub({Sub: Sub2, "boo": True}).boo is True
 
-        # providing a dict
-        self.assertEqual(Wrap(one=dict(foo=123)).one.foo, 123)
+    class Wrap(ParaO):
+        one: Sub = Param()
+        other: Sub2 = Param()
 
-        # unsing instance's Fragments
-        self.assertEqual(Wrap(one=Sub2(foo=123)).one.foo, 123)
-        self.assertEqual(Wrap(one=Sub2(foo=123).__fragments__).one.foo, 123)
+    class More(ParaO):
+        inner: Wrap = Param()
 
-        # direct instance providing
-        self.assertEqual(Wrap(one=Sub(foo=123)).one.foo, 123)
-        self.assertIs(Wrap(one=(s := Sub())).one, s)
+    for addr in [("one", "bar"), (Wrap.one, Sub.bar), (Wrap.one, Sub, "bar")]:
+        assert Wrap({addr: 123}).one.bar == "123"
+        assert Wrap({addr: 123}).other.bar is None
 
-        obj = Wrap({(Sub, "foo"): 123})
-        self.assertEqual(obj.one.foo, 123)
-        self.assertEqual(obj.other.foo, 123)
+    # providing a dict
+    assert Wrap(one=dict(foo=123)).one.foo == 123
 
-        # late commons
-        self.assertEqual(
-            Wrap({"foo": 321}, {("one", "N_A"): 123, "foo": 123}).one.foo, 123
-        )
+    # using instance's Fragments
+    assert Wrap(one=Sub2(foo=123)).one.foo == 123
+    assert Wrap(one=Sub2(foo=123).__fragments__).one.foo == 123
 
-        self.assertEqual(
-            Wrap(
-                {("one", "bar"): "boo"},
-                Fragments.make({(Sub, "foo"): 2}),
-            ).one.foo,
+    # direct instance providing
+    assert Wrap(one=Sub(foo=123)).one.foo == 123
+    assert Wrap(one=(s := Sub())).one is s
+
+    obj = Wrap({(Sub, "foo"): 123})
+    assert obj.one.foo == 123
+    assert obj.other.foo == 123
+
+    # late commons
+    assert Wrap({"foo": 321}, {("one", "N_A"): 123, "foo": 123}).one.foo == 123
+
+    assert (
+        Wrap(
+            {("one", "bar"): "boo"},
+            Fragments.make({(Sub, "foo"): 2}),
+        ).one.foo
+        == 2
+    )
+
+
+def test_remain():
+    class Drain(ParaO):
+        foo = Param[int]()
+        bar = Param[str]()
+
+    class Shared(ParaO):
+        drain = Param[Drain]()
+
+    class Low(Shared): ...
+
+    class High(Shared):
+        low = Param[Low]()
+
+    h = High({("drain", "foo"): 0, (ParaO, "drain", "foo"): 1})
+
+    assert h.drain.foo == 1
+    assert h.low.drain.foo == 1
+
+
+def test_gatekeeper():
+    class Sub(ParaO):
+        foo = Param[int]()
+        bar = Param[str](None)
+
+    class Wrap(ParaO):
+        main = Param[Sub]()
+        gated = Param[Sub](gatekeeper=True)
+
+    w = Wrap(foo=123, bar="boo")
+    assert w.main.foo == 123
+    assert w.main.bar == "boo"
+    with pytest.raises(MissingParameterValue):
+        w.gated.foo
+    assert w.gated.bar is None
+
+    w2 = Wrap(gated=Fragments.make(foo=321), foo=123)
+    assert w2.main.foo == 123
+    assert w2.gated.foo == 321
+
+    w3 = Wrap({(Sub, "foo"): 123})
+    assert w3.main.foo == 123
+    assert w3.gated.foo == 123
+
+    # triggers "late commons" sub append skip
+    w4 = Wrap({("gated", "foo"): 321, "foo": 123})
+    assert w4.main.foo == 123
+    assert w4.gated.foo == 321
+
+
+def test_common_base():
+    class Base(ParaO):
+        foo = Param[int](0)
+
+    class Ext1(Base):
+        pass
+
+    class Ext2(Base):
+        ext1 = Param[Ext1]()
+
+    ext2 = Ext2(foo=1)
+    assert ext2.foo == 1
+    assert ext2.ext1.foo == 0
+
+
+def test_non_eager_parameter():
+    class Foo(ParaO):
+        bar = Param[int](eager=False)
+
+    with eager(True):
+        foo = Foo()
+    with pytest.raises(MissingParameterValue):
+        foo.bar
+
+
+def test_expansion():
+    class Foo(ParaO):
+        bar = Param[int]()
+
+    with eager(False):
+        f = Foo(bar=[1, 2, 3])
+        # raises on access
+        with pytest.raises(Expansion):
+            f.bar
+
+    with eager(True):
+        with pytest.raises(Expansion):
+            Foo(bar=[1, 2, 3])
+        try:
+            Foo(Fragments.from_dict({"unused": 1}), bar=[1, 2, 3])
+        except Expansion as exp:
+            assert exp.param == Foo.bar
+            assert exp.param_name == "bar"
+            assert exp.values == (1, 2, 3)
+
+    assert repr(Expansion([1, 2, 3])) == "Expansion(<3 values>)"
+
+
+def test_collect():
+    class Foo(ParaO):
+        bar = Param[int]()
+
+    # function based
+    func = Mock(return_value=True)
+
+    class Wrap(ParaO):
+        foo = Param[Foo](collect=func)
+
+    with eager(True):
+        inst = Wrap(bar=[1, 2, 3])
+    exp = inst.foo
+    func.assert_called_once_with(exp, inst)
+    assert isinstance(exp.source, Foo)
+    assert isinstance(exp, Expansion)
+    assert exp.make_key() == ("bar",)
+    assert exp.make_key(False) == (Foo, "bar")
+    assert exp.make_key(False, use_cls=False) == ("bar",)
+    assert exp.make_key(False, use_name=False) == (Foo, Foo.bar)
+    with pytest.warns(ExpansionGeneratedKeyMissingParameter):
+        assert exp.make_key(False, use_param=False) == (Foo, "bar")
+    with pytest.warns(ExpansionGeneratedKeyMissingParameter):
+        assert exp.make_key(False, want=(Foo,), use_name=False) == (Foo, Foo.bar)
+    assert exp.make_key(False, want=(Foo.bar,)) == ("bar",)
+    assert isinstance(repr(exp), str)
+
+    # bare argument based
+    items = [[Foo], [Foo.bar], ["bar"]]
+    for coll in items + [[it] for it in items]:
+        with eager(True):
+            Wrap.foo.collect = coll
+            assert isinstance(Wrap(bar=[1, 2, 3]).foo, Expansion)
+
+
+def test_expand():
+    # uses two level expandable scenario
+
+    class Foo(ParaO):
+        bar = Param[int]()
+
+    class Mid(ParaO):
+        boo = Param[int](0)
+        foo = Param[Foo]()
+
+    class Wrap2(ParaO):
+        mid = Param[Mid](collect=Mock(return_value=True))
+
+    with eager(True):
+        assert Wrap2(bar=[1, 2, 3]).mid.make_key() == ("bar",)
+        assert Wrap2({("foo", "bar"): [1, 2, 3]}).mid.make_key() == ("foo", "bar")
+        assert Wrap2(foo=dict(bar=[1, 2, 3])).mid.make_key() == (Mid, "foo", "bar")
+        assert list(map(attrgetter("foo.bar"), Wrap2(bar=[1, 2, 3]).mid.expand())) == [
+            1,
             2,
-        )
-
-    def test_remain(self):
-        class Drain(ParaO):
-            foo = Param[int]()
-            bar = Param[str]()
-
-        class Shared(ParaO):
-            drain = Param[Drain]()
-
-        class Low(Shared): ...
-
-        class High(Shared):
-            low = Param[Low]()
-
-        h = High({("drain", "foo"): 0, (ParaO, "drain", "foo"): 1})
-
-        self.assertEqual(h.drain.foo, 1)
-        self.assertEqual(h.low.drain.foo, 1)
-
-    def test_gatekeeper(self):
-        class Sub(ParaO):
-            foo = Param[int]()
-            bar = Param[str](None)
-
-        class Wrap(ParaO):
-            main = Param[Sub]()
-            gated = Param[Sub](gatekeeper=True)
-
-        w = Wrap(foo=123, bar="boo")
-        self.assertEqual(w.main.foo, 123)
-        self.assertEqual(w.main.bar, "boo")
-        self.assertRaises(MissingParameterValue, lambda: w.gated.foo)
-        self.assertEqual(w.gated.bar, None)
-
-        w2 = Wrap(gated=Fragments.make(foo=321), foo=123)
-        self.assertEqual(w2.main.foo, 123)
-        self.assertEqual(w2.gated.foo, 321)
-
-        w3 = Wrap({(Sub, "foo"): 123})
-        self.assertEqual(w3.main.foo, 123)
-        self.assertEqual(w3.gated.foo, 123)
-
-        # triggers "late commons" sub append skip
-        w4 = Wrap({("gated", "foo"): 321, "foo": 123})
-        self.assertEqual(w4.main.foo, 123)
-        self.assertEqual(w4.gated.foo, 321)
-
-    def test_common_base(self):
-        class Base(ParaO):
-            foo = Param[int](0)
-
-        class Ext1(Base):
-            pass
-
-        class Ext2(Base):
-            ext1 = Param[Ext1]()
-
-        ext2 = Ext2(foo=1)
-        self.assertEqual(ext2.foo, 1)
-        self.assertEqual(ext2.ext1.foo, 0)
-
-    def test_non_eager_parameter(self):
-        class Foo(ParaO):
-            bar = Param[int](eager=False)
-
-        with eager(True):
-            foo = Foo()
-        with self.assertRaises(MissingParameterValue):
-            foo.bar
-
-    def test_expansion(self):
-        class Foo(ParaO):
-            bar = Param[int]()
-
-        with eager(False):
-            f = Foo(bar=[1, 2, 3])
-            # raises on access
-            self.assertRaises(Expansion, lambda: f.bar)
-
-        with eager(True):
-            self.assertRaises(Expansion, lambda: Foo(bar=[1, 2, 3]))
-            try:
-                Foo(Fragments.from_dict({"unused": 1}), bar=[1, 2, 3])
-            except Expansion as exp:
-                self.assertEqual(exp.param, Foo.bar)
-                self.assertEqual(exp.param_name, "bar")
-                self.assertEqual(exp.values, (1, 2, 3))
-
-        self.assertEqual(repr(Expansion([1, 2, 3])), "Expansion(<3 values>)")
-
-    def test_collect(self):
-        class Foo(ParaO):
-            bar = Param[int]()
-
-        # function based
-        func = Mock(return_value=True)
-
-        class Wrap(ParaO):
-            foo = Param[Foo](collect=func)
-
-        with eager(True):
-            inst = Wrap(bar=[1, 2, 3])
-        exp = inst.foo
-        func.assert_called_once_with(exp, inst)
-        self.assertIsInstance(exp.source, Foo)
-        self.assertIsInstance(exp, Expansion)
-        self.assertEqual(exp.make_key(), ("bar",))
-        self.assertEqual(exp.make_key(False), (Foo, "bar"))
-        self.assertEqual(exp.make_key(False, use_cls=False), ("bar",))
-        self.assertEqual(exp.make_key(False, use_name=False), (Foo, Foo.bar))
-        with self.assertWarns(ExpansionGeneratedKeyMissingParameter):
-            self.assertEqual(
-                exp.make_key(False, use_param=False),
-                (Foo, "bar"),
+            3,
+        ]
+        assert list(
+            map(
+                attrgetter("foo.bar"),
+                Wrap2({("foo", "bar"): [1, 2, 3]}).mid.expand(),
             )
-        with self.assertWarns(ExpansionGeneratedKeyMissingParameter):
-            self.assertEqual(
-                exp.make_key(False, want=(Foo,), use_name=False), (Foo, Foo.bar)
+        ) == [1, 2, 3]
+        assert list(
+            map(
+                attrgetter("foo.bar"),
+                Wrap2({("mid", "foo", "bar"): [1, 2, 3]}).mid.expand(),
             )
-        self.assertEqual(exp.make_key(False, want=(Foo.bar,)), ("bar",))
-        self.assertIsInstance(repr(exp), str)
-
-        # bare argument based
-        items = [[Foo], [Foo.bar], ["bar"]]
-        for coll in items + [[it] for it in items]:
-            with self.subTest(coll=coll), eager(True):
-                Wrap.foo.collect = coll
-                self.assertIsInstance(Wrap(bar=[1, 2, 3]).foo, Expansion)
-
-    def test_expand(self):
-        # uses two level expandable scenario
-
-        class Foo(ParaO):
-            bar = Param[int]()
-
-        class Mid(ParaO):
-            boo = Param[int](0)
-            foo = Param[Foo]()
-
-        class Wrap2(ParaO):
-            mid = Param[Mid](collect=Mock(return_value=True))
-
-        with eager(True):
-            self.assertEqual(Wrap2(bar=[1, 2, 3]).mid.make_key(), ("bar",))
-            self.assertEqual(
-                Wrap2({("foo", "bar"): [1, 2, 3]}).mid.make_key(), ("foo", "bar")
+        ) == [1, 2, 3]
+        assert list(
+            map(
+                attrgetter("boo", "foo.bar"),
+                Wrap2(boo=[1, -1], bar=[1, 2, 3]).mid.expand(),
             )
-            self.assertEqual(
-                Wrap2(foo=dict(bar=[1, 2, 3])).mid.make_key(), (Mid, "foo", "bar")
-            )
-            self.assertSequenceEqual(
-                list(map(attrgetter("foo.bar"), Wrap2(bar=[1, 2, 3]).mid.expand())),
-                [1, 2, 3],
-            )
-            self.assertSequenceEqual(
-                list(
-                    map(
-                        attrgetter("foo.bar"),
-                        Wrap2({("foo", "bar"): [1, 2, 3]}).mid.expand(),
-                    )
-                ),
-                [1, 2, 3],
-            )
-            self.assertSequenceEqual(
-                list(
-                    map(
-                        attrgetter("foo.bar"),
-                        Wrap2({("mid", "foo", "bar"): [1, 2, 3]}).mid.expand(),
-                    )
-                ),
-                [1, 2, 3],
-            )
-            self.assertSequenceEqual(
-                list(
-                    map(
-                        attrgetter("boo", "foo.bar"),
-                        Wrap2(boo=[1, -1], bar=[1, 2, 3]).mid.expand(),
-                    )
-                ),
-                [
-                    (1, 1),
-                    (1, 2),
-                    (1, 3),
-                    (-1, 1),
-                    (-1, 2),
-                    (-1, 3),
-                ],
-            )
+        ) == [
+            (1, 1),
+            (1, 2),
+            (1, 3),
+            (-1, 1),
+            (-1, 2),
+            (-1, 3),
+        ]
 
-    def test_inner(self):
-        out1 = Out()
-        self.assertEqual(
-            tuple(out1.__inner__), (out1.in1, *out1.in2, out1.in3u, out1.in3u)
-        )
 
-        out2 = Out(in2=[In(), In()])
-        self.assertEqual(
-            tuple(out2.__inner__), (out2.in1, *out2.in2, out2.in3u, out2.in3u)
-        )
+def test_inner():
+    out1 = Out()
+    assert tuple(out1.__inner__) == (out1.in1, *out1.in2, out1.in3u, out1.in3u)
 
-        with eager(True):
-            out3 = Out({("in1", "exp"): [1, 2]})
-        inner = tuple(out3.__inner__)
-        self.assertEqual(inner[0].exp, 1)
-        self.assertEqual(inner[1].exp, 2)
-        self.assertEqual(inner[2:], (out3.in3u, out3.in3u))
+    out2 = Out(in2=[In(), In()])
+    assert tuple(out2.__inner__) == (out2.in1, *out2.in2, out2.in3u, out2.in3u)
 
-    def test_pickle(self):
-        pre = Out({(In, In.exp): 1, "in2": [In(exp=2, uniq=3)], "uniq": -1})
-        post = pickle.loads(pickle.dumps(pre))
-        self.assertEqual(pre, post)
-        with self.assertRaises(pickle.PicklingError):
-            pickle.dumps(bare_param)
+    with eager(True):
+        out3 = Out({("in1", "exp"): [1, 2]})
+    inner = tuple(out3.__inner__)
+    assert inner[0].exp == 1
+    assert inner[1].exp == 2
+    assert inner[2:] == (out3.in3u, out3.in3u)
+
+
+def test_pickle():
+    pre = Out({(In, In.exp): 1, "in2": [In(exp=2, uniq=3)], "uniq": -1})
+    post = pickle.loads(pickle.dumps(pre))
+    assert pre == post
+    with pytest.raises(pickle.PicklingError):
+        pickle.dumps(bare_param)
 
 
 class In(ParaO):
