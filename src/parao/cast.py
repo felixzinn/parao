@@ -6,6 +6,8 @@ from numbers import Number
 from types import NoneType, UnionType
 from typing import Any, Protocol, Union, _AnnotatedAlias, get_args, get_origin
 
+from .misc import ewarn, safe_repr
+
 _numeric = int, float, complex
 
 
@@ -21,6 +23,10 @@ class Opaque:
     """Ignored during casting unless they are Castable."""
 
 
+class SignatureIndeterminable(RuntimeWarning):
+    pass
+
+
 class Castable(Protocol):
     @classmethod
     def __cast_from__(cls, value, original_type): ...
@@ -31,9 +37,16 @@ def sigcheck(func: Callable, args: tuple, ret) -> bool:
     if args is ...:
         return True
     try:
-        signature(func).bind(*args)
+        sig = signature(func)
+    except ValueError:
+        ewarn(safe_repr(func), SignatureIndeterminable)  # pragma: no cover
     except TypeError:
-        return False
+        return False  # not a callable
+    else:
+        try:
+            sig.bind(*args)
+        except TypeError:
+            return False
     return True
 
 

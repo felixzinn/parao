@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 import pytest
 
-from parao.cast import CastError, cast
+from parao.cast import CastError, cast, sigcheck
 
 
 def test_primitives():
@@ -102,3 +102,11 @@ def test_complex():
 
     with pytest.raises(TypeError):
         cast(1, Boo[int])
+
+
+def test_sigcheck():
+    sigcheck(1, (), int)
+
+    def foo() -> "str": ...
+
+    sigcheck(foo, (), int)

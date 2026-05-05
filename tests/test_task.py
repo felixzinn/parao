@@ -2,7 +2,7 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from functools import partial
 from io import BytesIO, IOBase, StringIO, TextIOWrapper
 from pathlib import Path
@@ -15,6 +15,7 @@ from warnings import catch_warnings
 import pytest
 
 from parao.action import ValueAction
+from parao.cast import SignatureIndeterminable
 from parao.cli import CLI
 from parao.core import Const, Fragments, OwnParameters, Param, ParaO
 from parao.output import (
@@ -605,10 +606,15 @@ def test_templating(tmpdir):
         "tests.test_task:TaskT",
         "label1=0.1",
     )
-    assert probe(TaskT, tot_limit=40, label_patt="{1}<={0}".format) == (
-        "tests.test_task:TaskT",
-        "0.1<=label1",
-    )
+    with (
+        nullcontext()
+        if sys.version_info >= (3, 13)
+        else pytest.warns(SignatureIndeterminable)
+    ):
+        assert probe(TaskT, tot_limit=40, label_patt="{1}<={0}".format) == (
+            "tests.test_task:TaskT",
+            "0.1<=label1",
+        )
     assert probe(TaskT, label_mod=2) == (
         "tests.test_task:TaskT",
         "label1=0.1",
