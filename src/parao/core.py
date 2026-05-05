@@ -40,8 +40,8 @@ type Mapish[K, V] = Mapping[K, V] | Iterable[tuple[K, V]]
 
 
 @dataclass(slots=True, frozen=True, weakref_slot=True)
-class Value[T: Any]:
-    val: T
+class Value:
+    val: Any
     prio: PrioT = 0
     position: int = 0
 
@@ -288,9 +288,7 @@ class Fragments(tuple["Fragments | Fragment", ...]):
         return Solutions(self, owner)(param)
 
     @lru_cache
-    def solve_class(
-        self, ref: "ParaOMeta"
-    ) -> "tuple[Fragments, Value[ParaOMeta] | None]":
+    def solve_class(self, ref: "ParaOMeta") -> "tuple[Fragments, Value | None]":
         sub = []
         res = res0 = Value(ref, -inf)
         tar = {None, "__class__"}
