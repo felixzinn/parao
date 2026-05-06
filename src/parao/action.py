@@ -238,7 +238,7 @@ class Plan(list[_Act]):
                 if isinstance(value, _Act):
                     if value.trigger:
                         self.append(value)
-                else:
+                elif param.significant:
                     for inner in get_inner_parao(value):
                         if inner not in seen:
                             seen.add(inner)

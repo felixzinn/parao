@@ -208,6 +208,13 @@ def test_output_extraCoder(tmpdir4BaseTask):
         assert t.run.output.path.read_text() == "[\n  1,\n  2,\n  3\n]"
         assert t.run.output.load() == mock.return_value
 
+    with pytest.warns(UntypedOuput):
+        CLI(
+            {
+                (FancyTemplate, "coders_extra"): list(coders_extra),
+            }
+        ).run(["TaskX"])
+
 
 @contextmanager
 def make_readonly(target):
