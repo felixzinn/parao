@@ -245,13 +245,13 @@ class Output[R, A: RunAct](_Output[R, A]):
         elif diff_dev := (data.stat().st_dev != path.parent.stat().st_dev):
             warn("may be slow or fail", MoveAcrossFilesystem, stacklevel=3)
         try:
-            data = data.replace(path)
+            data = type(data)(data.replace(path))
         except OSError as err:
             if err.errno == EXDEV and diff_dev:
                 warn("failed, making explicit copy", MoveAcrossFilesystem, stacklevel=3)
                 # try again
                 data = self._temp_copy(data)
-                data = data.replace(path)
+                data = type(data)(data.replace(path))
             else:
                 raise
         return data
