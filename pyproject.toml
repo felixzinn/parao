@@ -17,6 +17,7 @@ extra-dependencies = ["pytest-cov", "pytest-subtests"]
 # run = "run-coverage --no-cov"
 
 [tool.coverage.run]
+core = "ctrace"
 source_pkgs = ["parao", "tests"]
 branch = true
 parallel = true
