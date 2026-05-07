@@ -3,7 +3,7 @@ import re
 import sys
 from ast import literal_eval
 from collections import defaultdict
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
 from importlib import import_module
@@ -221,14 +221,11 @@ class CLI:
 
     def __init__(
         self,
-        *args: Fragments
-        | HasFragments
-        | dict[KeyTE, Any]
-        | Collection[str | tuple[KeyTE, Any]],
+        *args: Fragments | HasFragments | dict[KeyTE, Any] | Iterable[str],
         entry_points: Iterable[ParaOMeta] | None = None,
     ):
-        seen = set()
-        queue: list[type] = [ParaO] if entry_points is None else list(entry_points)
+        seen: set[ParaOMeta] = set()
+        queue: list[ParaOMeta] = [ParaO] if entry_points is None else list(entry_points)
         for curr in queue:
             queue.extend(
                 cand
@@ -240,8 +237,8 @@ class CLI:
             seen.add(curr)
 
         self._paraos = seen
-        self._args = Fragments.EMPTY
-        self._args = Fragments._make(args, parser=self.make_args)
+        self._common_frags = Fragments.EMPTY
+        self._common_frags = self.parse_frags(args)
 
     @cached_property
     def find_parao(self):
@@ -335,7 +332,7 @@ class CLI:
     def parse_typ(self, raw: str):
         return self._parse_mod_att(self.parse_raw.element(raw), ParaOMeta, NotAParaO)
 
-    def parse_key(self, mod_att):
+    def parse_key(self, mod_att: tuple[str, str | None]):
         return (
             self._parse_mod_att(
                 mod_att,
@@ -346,16 +343,29 @@ class CLI:
         )
 
     def parse_args(
-        self, args: list[str], position0: int = 100, typ0: type | None = None
-    ):
+        self, args: Iterable[str]
+    ) -> tuple[list[str], list[tuple[ParaOMeta, Fragments, list[str]]], list[str]]:
+        return self._parse_args(args, pure=False)
+
+    def parse_frags(
+        self,
+        args: Iterable[Fragments | HasFragments | dict[KeyTE, Any] | Iterable[str]],
+    ) -> Fragments:
+        return Fragments._make(args, parser=self._parse_args)
+
+    def _parse_args(self, args: Iterable[str], position0: int = 100, pure: bool = True):
         pos = count(position0)
-        pre: list[str] = []
+        com: list[Fragments] = []
         got: list[tuple[ParaOMeta, Fragments, list[str]]] = []
 
-        typ: type = typ0
-        raw: list[str] = None if typ0 is None else []
-        curr0 = [self._args] if self._args else []
-        curr: list[Fragment] = None if typ0 is None else curr0.copy()
+        if self._common_frags:
+            com.append(self._common_frags)
+
+        pre: list[str] = []
+        post: list[str] = []
+        raw: list[str] = []
+        cur = [] if pure else None
+        typ = None
 
         pit = PeekableIter(args)
         for arg in pit:
@@ -364,8 +374,8 @@ class CLI:
             if not arg:  # ignore empty standalone args
                 continue
             if body := arg.lstrip("+-"):
-                if start := arg[: -len(body)]:
-                    if typ is None:
+                if prefix := arg[: -len(body)]:
+                    if cur is None:  # collect preceding strings
                         pre.append(arg)
                         continue
 
@@ -412,35 +422,48 @@ class CLI:
                                 e.add_note(f"for argument: {arg}")
                                 raise
                     else:
-                        prio = 1 - start.count("-") + start.count("+")
+                        prio = 1 - prefix.count("-") + prefix.count("+")
 
                     raw.append(arg)
-                    curr.append(Fragment.make(key, value, prio, next(pos)))
-                else:
-                    if typ0 is not None:
-                        raise ValueUnexpected(arg)
-                    if typ is not None:
-                        got.append((typ, Fragments.from_list(curr), raw))
-                    # solve typ
-                    typ = self.parse_typ(body)
-                    if not typ:
-                        raise ParaONotFound(body)
-                    raw = [arg]
-                    curr = curr0.copy()
+                    cur.append(Fragment.make(key, value, prio, next(pos)))
+
+                    if pure or pit.more:
+                        continue
+                    else:  # fall through into flush, but avoid starting a new task
+                        body = ""
+
+            if pure:
+                raise ValueUnexpected(arg)
+
+            # flush
+            if typ is None:
+                if cur:
+                    com.append(Fragments.from_list(cur))
+                post = post + raw  # collect all dangeling arguments
             else:
-                if typ0 is not None:
-                    raise ValueUnexpected(arg)
-                break
+                assert cur is not None
+                got.append((typ, Fragments.from_list(com + cur), raw))
+                post = []
 
-        if typ is not None:
-            got.append((typ, Fragments.from_list(curr), raw))
+            raw = []
+            cur = []
 
-        return pre, got, list(pit)
+            if body:
+                if not (typ := self.parse_typ(body)):
+                    raise ParaONotFound(body)
+                raw.append(body)
 
-    def make_args(self, args: list[str]):
-        pre, got, post = self.parse_args(args, typ0=object)
-        assert not pre and not post
-        return got[0][1] if got else Fragments.EMPTY
+                if not pit.more:  # extra flush
+                    got.append((typ, Fragments.from_list(com), raw))
+                    post = []
+                    break
+            else:
+                typ = None
+
+        if pure:
+            return Fragments.from_list(cur)
+        else:
+            return pre, got, post
 
     def _consume(self, typ: ParaOMeta, frags: Fragments, raw: list[str] = ()):
         try:
