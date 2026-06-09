@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import pytest
 
@@ -27,6 +27,10 @@ def test_primitives():
     assert cast(None, type(None)) is None
     with pytest.raises(TypeError):
         cast(True, None)
+
+    assert cast("foo", Literal["foo"]) == "foo"
+    with pytest.raises(CastError):
+        cast("foo", Literal["bar"])
 
     # bad type
     with pytest.raises(TypeError):

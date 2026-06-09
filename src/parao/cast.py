@@ -4,7 +4,7 @@ from inspect import signature
 from itertools import repeat
 from numbers import Number
 from types import NoneType, UnionType
-from typing import Any, Protocol, Union, _AnnotatedAlias, get_args, get_origin
+from typing import Any, Literal, Protocol, Union, _AnnotatedAlias, get_args, get_origin
 
 from .misc import ewarn, safe_repr
 
@@ -69,6 +69,12 @@ def cast(val: Any, typ: type) -> Any:
 
     if ori:
         args = get_args(typ)
+
+        if ori is Literal:
+            if val in args:
+                return val
+            else:
+                raise CastError(val, typ)
 
         if ori is UnionType or ori is Union:
             err = CastError(val, typ)
