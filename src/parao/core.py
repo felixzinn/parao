@@ -499,11 +499,7 @@ class ParaO(metaclass=ParaOMeta):
         return res
 
     def __eq__(self, other):
-        return (
-            isinstance(self, ParaO)
-            and self.__class__ is other.__class__
-            and bin_hash(self) == bin_hash(other)
-        )
+        return self.__class__ is other.__class__ and bin_hash(self) == bin_hash(other)
 
     def __hash__(self) -> int:
         return int.from_bytes(bin_hash(self)[:8])
