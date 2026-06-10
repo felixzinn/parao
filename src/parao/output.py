@@ -461,6 +461,7 @@ class FancyTemplate(PlainTemplate):
     label_patt = Param[Callable[[str, str], str] | str]("{0}={1}")
     small_mod = Param[int](1)
     label_mod = Param[int](0)
+    label_always = Param[bool](False)
     default_pos = Param[float | None](None)
     default_pos_grp = Param[float](0)
 
@@ -476,6 +477,7 @@ class FancyTemplate(PlainTemplate):
         cand: list[tuple[float, str, str | Iterable[ParaO]]] = []
         rest: list[Iterable[ParaO]] = []
         lmod = self.label_mod
+        lalways = self.label_always
 
         for name, param in inst.__class__.__own_parameters__.items():
             if not param.significant:
@@ -491,7 +493,7 @@ class FancyTemplate(PlainTemplate):
             else:
                 if (enc := self._encode_value(val)) is None:
                     enc = get_inner_parao(val)
-                label = getattr(param, "label", lmod and not pos % lmod)
+                label = getattr(param, "label", lalways or (lmod and not pos % lmod))
                 cand.append((pos, name, label, enc))
 
         cand.sort()

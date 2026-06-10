@@ -570,7 +570,7 @@ class TaskT(Task):
     label2 = Param[float](0.2, pos=0, label="LaBeL~2")
 
     small11 = Param[int](11, pos=1.1)
-    small12 = Param[int](12, pos=1.2)
+    small12 = Param[int](12, pos=1.2, label=False)
     small13 = Param[int](13, pos=1.3)
 
     normal = Param[int](2, grp=2)
@@ -622,6 +622,14 @@ def test_templating(tmpdir):
             "tests.test_task:TaskT",
             "0.1<=label1",
         )
+    assert probe(TaskT, label_always=True) == (
+        "tests.test_task:TaskT",
+        "label1=0.1",
+        "LaBeL~2=0.2",
+        "small11=11_12_small13=13",
+        "normal=2",
+        "small21=21_small22=22_small23=23",
+    )
     assert probe(TaskT, label_mod=2) == (
         "tests.test_task:TaskT",
         "label1=0.1",
