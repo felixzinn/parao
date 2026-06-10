@@ -3,11 +3,29 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-version = "0.1.2"
+dynamic = ["version"]
 name = "parao"
 authors = [{ name = "B. Fischer", email = "b.fis@cern.ch" }]
-description = "Coming soon"
+description = "Parametrized Object enabled Workflows"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: System Administrators",
+]
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
+
+[tool.hatch.version]
+path = "src/parao/__init__.py"
+
+[project.urls]
+Repository = "https://gitlab.com/bfis/parao"
+Issues = "https://gitlab.com/bfis/parao/issues"
 
 [tool.hatch.envs.hatch-test]
 extra-dependencies = ["pytest-cov", "pytest-subtests"]

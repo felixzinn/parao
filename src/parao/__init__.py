@@ -1,3 +1,5 @@
+__version__ = "0.1.3"
+
 from .action import RecursiveAction, SimpleAction, ValueAction
 from .cast import Opaque  # noqa: F401
 from .cli import CLI
