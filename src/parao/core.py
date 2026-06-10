@@ -117,6 +117,18 @@ class Fragment:
             r += i.effective_key
         return r
 
+    @property
+    def value(self) -> Value:
+        match self.inner:
+            case Value() as value:
+                return value
+            case Fragment() as frag:
+                return frag.value
+            case Fragments([frag]):
+                return frag.value
+            case _:
+                raise ValueError("no unique value")
+
     def __repr__(self):
         return (
             f"{self.__class__.__name__}({self.param!r}, {self.types!r}, {self.inner!r})"

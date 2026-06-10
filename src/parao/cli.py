@@ -3,7 +3,7 @@ import re
 import sys
 from ast import literal_eval
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from functools import cached_property
 from importlib import import_module
@@ -205,7 +205,7 @@ class UnusedOptions(RuntimeWarning):
 
 
 class UnmatchedArguments(RuntimeWarning):
-    "These arguments never matched with any parameter - often caused typos."
+    "These arguments never matched with any parameter - often caused by typos."
 
 
 class UnusedArguments(UnmatchedArguments):
@@ -344,7 +344,7 @@ class CLI:
 
     def parse_args(
         self, args: Iterable[str]
-    ) -> tuple[list[str], list[tuple[ParaOMeta, Fragments, list[str]]], list[str]]:
+    ) -> tuple[list[str], Iterator[Iterator[ParaO]], list[str]]:
         return self._parse_args(args, pure=False)
 
     def parse_frags(
@@ -390,6 +390,7 @@ class CLI:
                     if value is None:
                         if not pit.peek("+").startswith(("+", "-")):
                             value = next(pit)
+                            arg = f"{arg} {value}"
                     if "class" in flags or key[-1] == "__class__":
                         if not value:
                             raise ValueMissing(arg)
@@ -463,7 +464,7 @@ class CLI:
         if pure:
             return Fragments.from_list(cur)
         else:
-            return pre, got, post
+            return pre, starmap(self._consume, got), post
 
     def _consume(self, typ: ParaOMeta, frags: Fragments, raw: list[str] = ()):
         try:
@@ -472,28 +473,34 @@ class CLI:
             exc.add_note(f"for arguments: {' '.join(raw)}")
             raise
         finally:
-            if unused := {f: v in Value.seen for f, v in frags.enumerate(used=False)}:
-                for warning, val in [
+            if unused := [
+                (val, arg)
+                for frag, arg in zip(reversed(frags), raw[:0:-1])
+                if (val := frag.value) not in Value.used
+            ]:
+                for warning, ref in [
                     (UnmatchedArguments, False),
                     (UnusedArguments, True),
                 ]:
-                    if names := [
-                        r for frag, r in zip(frags, raw[1:]) if unused.get(frag) is val
-                    ]:
-                        ewarn(" ".join(names), warning)
+                    if names := " ".join(
+                        arg
+                        for val, arg in reversed(unused)
+                        if (val in Value.seen) is ref
+                    ):
+                        ewarn(names, warning)
 
     def run(self, args: list[str] | None = None, /, **kwargs):
         if args is None:
             args = sys.argv[1:]
 
-        pre, got, post = self.parse_args(args)
+        pre, gen, post = self.parse_args(args)
 
         if pre:
             ewarn(f"at begin: {' '.join(pre)}", UnusedOptions)
         if post:
             ewarn(f"at end: {' '.join(post)}", UnusedOptions)
 
-        chunks = list(map(list, starmap(self._consume, got)))
+        chunks = list(map(list, gen))
         Plan().run(*chunks, **kwargs)
         return sum(chunks, [])
 

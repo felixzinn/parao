@@ -198,6 +198,9 @@ def test_unused_parameters():
     ):
         cli.run(["Outer1", arg_shadowed, *args_not_used, "--foo=3"])
 
+    with pytest.warns(UnusedArguments, match="--bar"):
+        CLI({(Outer1, "bar"): "boo"}).run(["Outer1", "--bar", "bam", "--boo"])
+
 
 def test_errors():
     with pytest.raises(MissingParameterValue):

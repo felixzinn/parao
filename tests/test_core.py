@@ -122,6 +122,7 @@ def test_Fragments():
 
     frag = Fragment.make(("foo",), Args(bar=uniq_object).with_prio(123))
     assert frag.inner[0].inner.prio == 123
+    assert frag.value.val is uniq_object
 
     assert Fragments.make(Args(foo=uniq_object).with_prio(123))[0].inner.prio == 123
 
@@ -145,6 +146,7 @@ def test_Fragments():
             ),
         ]
     )
+    assert list(frags.enumerate(nested=False, used=True)) == []
     assert list(frags.enumerate(nested=False)) == [
         (frags[0], frags[0].inner),
         (frags[1], frags[1].inner.inner),
@@ -156,6 +158,8 @@ def test_Fragments():
         (frags[2], frags[2].inner[1], frags[2].inner[1].inner.inner),
         (frags[3][0], frags[3][0].inner),
     ]
+    with pytest.raises(ValueError):
+        frags[2].value
 
 
 def test_param():
