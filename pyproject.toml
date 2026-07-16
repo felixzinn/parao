@@ -30,16 +30,17 @@ Issues = "https://gitlab.com/bfis/parao/issues"
 [tool.hatch.envs.hatch-test]
 extra-dependencies = ["pytest-cov", "pytest-subtests"]
 
-# [tool.hatch.envs.test.scripts]
-# run-coverage = "pytest --cov-config=pyproject.toml --cov=pkg --cov=tests"
-# run = "run-coverage --no-cov"
+[tool.hatch.envs.hatch-test.scripts]
+run = "pytest{env:HATCH_TEST_ARGS:} {args}"
+run-cov = "pytest{env:HATCH_TEST_ARGS:} --cov"
+cov-combine = "" # "coverage combine" # already done by pytest-cov
+cov-report = "coverage html"
 
 [tool.coverage.run]
 core = "ctrace" # HACK for coveragepy/issues/2167
 source_pkgs = ["parao", "tests"]
 branch = true
 parallel = true
-omit = ["src/parao/__about__.py"]
 
 [tool.coverage.paths]
 parao = ["src/parao", "*/parao/src/parao"]
