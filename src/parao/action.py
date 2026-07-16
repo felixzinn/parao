@@ -36,6 +36,7 @@ def _method_1st_arg_annotation[T](
                 else:
                     return param.annotation
             break
+        pass  # HACK for coveragepy/issues/2168
     return UNSET
 
 
