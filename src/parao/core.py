@@ -1,4 +1,5 @@
 from abc import ABCMeta
+from collections import deque
 from collections.abc import Callable, Collection, Generator, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from functools import lru_cache, partial
@@ -875,18 +876,20 @@ class Expansion[T](BaseException):
 
     @staticmethod
     def generate(
-        typ: ParaOMeta, frags: Fragments, **kwargs
+        typ: ParaOMeta, frags: Fragments, prio: PrioT = 0, **kwargs
     ) -> Generator[ParaO, None, None]:
+        todo = deque([frags])
         with eager(True):
-            try:
-                yield typ(frags)
-            except Expansion as exp:
-                exp.make = lambda frag: typ(Fragments((frags, frag)))
+            while todo:
+                curr = todo.popleft()
                 try:
-                    yield from exp.expand(**kwargs)
-                except Exception as exc:
-                    exc.add_note(f"while expanding: {exp!r}")
-                    raise
+                    yield typ(curr)
+                except Expansion as exp:
+                    key = exp.make_key(**kwargs)
+                    todo.extend(
+                        Fragments((curr, Fragment.make(key, val, prio)))
+                        for val in exp.values
+                    )
 
     @property
     def param_name(self):

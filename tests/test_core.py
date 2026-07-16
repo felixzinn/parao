@@ -553,6 +553,22 @@ def test_expand():
         ]
 
 
+class GenerateSomething(ParaO):
+    p1 = Param[int]()
+    p2 = Param[int]()
+
+
+def test_generate():
+    assert list(
+        Expansion.generate(GenerateSomething, Fragments.make(p1=[1, 2], p2=[3, 4]))
+    ) == [
+        GenerateSomething(p1=1, p2=3),
+        GenerateSomething(p1=1, p2=4),
+        GenerateSomething(p1=2, p2=3),
+        GenerateSomething(p1=2, p2=4),
+    ]
+
+
 def test_inner():
     out1 = Out()
     assert tuple(out1.__inner__) == (out1.in1, *out1.in2, out1.in3u, out1.in3u)
