@@ -1,4 +1,4 @@
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 from .action import RecursiveAction, SimpleAction, ValueAction
 from .cast import Opaque  # noqa: F401
