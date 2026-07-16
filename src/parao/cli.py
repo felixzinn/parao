@@ -10,7 +10,7 @@ from importlib import import_module
 from itertools import count, starmap
 from operator import attrgetter
 from types import NoneType
-from typing import Any, Literal
+from typing import Any
 
 from .action import Plan
 from .cast import CastError, cast
