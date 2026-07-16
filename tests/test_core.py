@@ -324,6 +324,16 @@ def test_resolution_simple():
     assert Sub({("foo", "N_A"): 123, "N_A": "", "foo": 321}).foo == 321
 
 
+def test_class_frags():
+    class Lvl1(ParaO):
+        foo = Param[int](0)
+
+    class Lvl2(ParaO):
+        sub = Param[Lvl1]()
+
+    assert Lvl2({Lvl2: Args(sub=Args(foo=1))}).sub.foo == 1
+
+
 def test_resolution_complex():
     class Sub(ParaO):
         foo: int = Param()

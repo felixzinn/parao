@@ -304,10 +304,18 @@ class Fragments(tuple["Fragments | Fragment", ...]):
     def solve_class(self, ref: "ParaOMeta") -> "tuple[Fragments, Value | None]":
         sub = []
         res = res0 = Value(ref, -inf)
-        tar = {None, "__class__"}
         alt = False  # sub != self
 
         for frag in self:
+            while (
+                isinstance(frag, Fragment)
+                and frag.param is None
+                and not isinstance(frag.inner, Value)
+                and frag.is_type_ok(res.val)
+            ):
+                frag = frag.inner
+                alt = True
+
             if isinstance(frag, Fragments):
                 s, r = frag.solve_class(res.val)
                 if s:
@@ -316,7 +324,7 @@ class Fragments(tuple["Fragments | Fragment", ...]):
                 if r is None:
                     continue
             elif (
-                frag.param in tar
+                (frag.param is None or frag.param == "__class__")
                 and isinstance((r := frag.inner), Value)
                 and frag.is_type_ok(res.val)
             ):
