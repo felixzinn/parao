@@ -10,7 +10,7 @@ from importlib import import_module
 from itertools import count, starmap
 from operator import attrgetter
 from types import NoneType
-from typing import Any
+from typing import Any, Literal
 
 from .action import Plan
 from .cast import CastError, cast
@@ -218,6 +218,8 @@ class CLI:
         "json": json.loads,
         "python": literal_eval,
     }
+    # a CLI carries fragments, similar to a ParaO
+    __fragments__ = Fragments.EMPTY
 
     def __init__(
         self,
@@ -237,8 +239,14 @@ class CLI:
             seen.add(curr)
 
         self._paraos = seen
-        self._common_frags = Fragments.EMPTY
-        self._common_frags = self.parse_frags(args)
+        self.__fragments__ = self.parse_frags(args)
+
+    def sub(
+        self,
+        *args: Fragments | HasFragments | dict[KeyTE, Any] | Iterable[str],
+        entry_points: Iterable[ParaOMeta] | None = None,
+    ):
+        return self.__class__(self, *args, entry_points=entry_points)
 
     @cached_property
     def find_parao(self):
@@ -358,8 +366,8 @@ class CLI:
         com: list[Fragments] = []
         got: list[tuple[ParaOMeta, Fragments, list[str]]] = []
 
-        if self._common_frags:
-            com.append(self._common_frags)
+        if self.__fragments__:
+            com.append(self.__fragments__)
 
         pre: list[str] = []
         post: list[str] = []

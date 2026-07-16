@@ -156,6 +156,20 @@ def test_global():
         CLI(["--"])
 
 
+def test_sub():
+    cli = CLI(["--foo", "123"])
+    assert cli.run(["Outer1"])[0].foo == 123
+
+    class Late(ParaO): ...
+
+    sub = cli.sub(["--foo", "456"])
+    assert sub.run(["Outer1"])[0].foo == 456
+    assert isinstance(sub.run(["Late"])[0], Late)
+
+    sub = CLI(cli, ["--foo", "789"])
+    assert sub.run(["Outer1"])[0].foo == 789
+
+
 def test_prio():
     cli = CLI()
     with pytest.warns(UnusedArguments):
